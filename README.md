@@ -1,61 +1,118 @@
-# Blitz - Plugin Minecraft (1.21) pour HeroCraft
+# 🏆 Blitz - Plugin Minecraft (1.21) pour HeroCraft
 
-## Compilation
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue)](https://github.com/herocraftlol/Blitz-Plugin/releases)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://www.minecraft.net/)
+[![Paper](https://img.shields.io/badge/Paper-1.21-orange)](https://papermc.io/)
 
-Ce projet est un projet Maven. Comme mon environnement de travail n'a pas accès à Internet,
-je n'ai pas pu exécuter `mvn package` pour vérifier la compilation finale — il faudra le faire
-de votre côté (le code a été relu attentivement mais un `mvn clean package` reste nécessaire
-pour confirmer qu'il n'y a pas de coquille).
+## 📝 Description
+
+Plugin de jeu **Blitz** pour serveur Minecraft Paper 1.21. Un jeu compétitif en 2 équipes (Rouge/Bleu) où le but est de **sauter dans le trou adverse** pour marquer des points !
+
+### ✨ Nouvelles fonctionnalités en v2.0.0
+
+- 🎮 **Lobby d'attente** - Système de lobby avec retour automatique à la position initiale
+- 🎲 **Join aléatoire** - Commande `/blitz joinrandom` pour rejoindre une arène aléatoire
+- 🖥️ **GUI amélioré** - Interface graphique redesignée pour la sélection des arènes
+- 📊 **Leaderboard complet** - Classements holographiques améliorés (wins, played, kd, kills)
+- 🔄 **Commande `/arenas`** - Alias rapide pour accéder au GUI des arènes
+- 🎒 **Objets de lobby** - Items personnalisés pour naviguer et quitter le jeu
+- 📍 **Retour position** - Les joueurs retrouvent leur position exacte après avoir quitté une partie
+
+### ✨ Fonctionnalités principales
+
+- 🎮 **Système d'arènes complet** - Créez et gérez vos propres maps de Blitz
+- ⚔️ **Combat équitable** - Épée en bois incassable + armure en cuir colorée (indestructible)
+- 📦 **Coffres de butin** - Réapprovisionnement automatique avec équipement de combat
+- 🏅 **Classements holographiques** - Top 10 en temps réel (Victoires, Parties, K/D, Kills)
+- 📋 **Scoreboard dynamique** - Statistiques des équipes en temps réel
+- 🛡️ **Protection des blocs** - Les structures sont protégées, seuls vos blocs sont cassables
+- 🎯 **Système de goals** - Zone de victoire unique pour chaque équipe
+- 🔄 **Réinitialisation d'arène** - La zone définie se réinitialise automatiquement entre les parties
+
+## 📥 Téléchargement
+
+**➡️ [Télécharger la dernière version](https://github.com/herocraftlol/Blitz-Plugin/releases/latest)**
+
+Le fichier `Blitz.jar` doit être placé dans le dossier `plugins/` de votre serveur Paper/Spigot 1.21.
+
+## 🚀 Installation rapide
+
+1. Téléchargez `Blitz.jar` depuis la [page des releases](https://github.com/herocraftlol/Blitz-Plugin/releases)
+2. Placez le fichier dans le dossier `plugins/` de votre serveur
+3. Redémarrez votre serveur
+4. Configurez votre première arène :
 
 ```bash
-cd blitz-plugin
+/blitz setlobby          # Définissez le spawn principal (lobby d'attente)
+/blitz create <nom>      # Créez une nouvelle arène
+/blitz wand              # Obtenez la baguette de sélection
+# Faites clic gauche (pos1) et clic droit (pos2) pour sélectionner une zone
+/blitz setregion <nom>   # Définissez la zone qui se réinitialise
+/blitz setgoal red <nom> # Sélectionnez le goal équipe rouge
+/blitz setgoal blue <nom># Sélectionnez le goal équipe bleue
+/blitz setspawn red <nom>   # Spawn équipe rouge
+/blitz setspawn blue <nom>  # Spawn équipe bleue
+# Placez des coffres avec du loot puis :
+/blitz addchest <nom>    # Ajoutez un coffre de butin
+```
+
+## 🎮 Comment jouer
+
+Les joueurs rejoignent avec `/blitz join <arene>` pour une arène spécifique ou `/blitz joinrandom` pour rejoindre aléatoirement. Le lobby d'attente permet aux joueurs de se préparer avant la partie. Le premier équipe à atteindre le score cible (5 par défaut) gagne !
+
+## ⚙️ Commandes
+
+### Commandes joueurs
+| Commande | Description |
+|----------|-------------|
+| `/blitz join <arene>` | Rejoindre une partie spécifique |
+| `/blitz joinrandom` | Rejoindre une arène aléatoire |
+| `/blitz leave` | Quitter la partie en cours (retour au lobby) |
+| `/blitz gui` ou `/arenas` | Ouvrir le menu de sélection des arènes |
+| `/blitz stats [joueur]` | Voir vos statistiques ou celles d'un joueur |
+
+### Commandes Admin (permission `blitz.admin`)
+| Commande | Description |
+|----------|-------------|
+| `/blitz wand` | Obtenir la baguette de sélection |
+| `/blitz create <nom>` | Créer une nouvelle arène |
+| `/blitz delete <nom>` | Supprimer une arène |
+| `/blitz list` | Lister toutes les arènes |
+| `/blitz setlobby` | Définir le spawn lobby (position d'attente) |
+| `/blitz setspawn red/blue <arene>` | Définir les spawns d'équipe |
+| `/blitz setregion <arene>` | Définir la zone de réinitialisation |
+| `/blitz setgoal red/blue <arene>` | Définir le goal de l'équipe |
+| `/blitz addchest <arene>` | Ajouter un coffre de butin |
+| `/blitz setlimit <arene> <score>` | Score pour gagner (défaut: 5) |
+| `/blitz setteamsize <arene> <1-8>` | Taille des équipes (1v1 à 8v8) |
+| `/blitz forcestart <arene>` | Forcer le démarrage |
+| `/blitz hologram wins/played/kd/kills` | Créer un classement holographique |
+| `/blitz delhologram` | Supprimer l'hologramme le plus proche |
+| `/blitz reload` | Recharger la configuration |
+
+## 🔧 Configuration
+
+Le fichier `plugins/Blitz/config.yml` est généré automatiquement au premier démarrage. Vous pouvez y modifier :
+- Le délai de réapprovisionnement des coffres de butin
+- Le score maximum pour gagner
+- Les messages du plugin
+
+## 🛠️ Compilation depuis les sources
+
+Si vous souhaitez compiler le plugin vous-même :
+
+```bash
+git clone https://github.com/herocraftlol/Blitz-Plugin.git
+cd Blitz-Plugin
 mvn clean package
 ```
 
-Le jar généré se trouve dans `target/Blitz.jar`. Placez-le dans le dossier `plugins/` de votre
-serveur (Paper/Spigot **1.21** requis).
+Le fichier JAR sera généré dans `target/Blitz.jar`.
 
-## Mise en place
+**Prérequis :**
+- Java 21
+- Maven 3.6+
 
-1. Démarrez le serveur une première fois pour générer `plugins/Blitz/config.yml`.
-2. Définissez le spawn du lobby : `/blitz setlobby` (en te tenant à l'endroit voulu).
-3. Créez une arène : `/blitz create <nom>`.
-4. Récupérez la baguette de sélection : `/blitz wand` (clic gauche = pos1, clic droit = pos2).
-5. Sélectionnez la zone qui doit se réinitialiser à chaque partie (bâtiments, sol, etc.) puis :
-   `/blitz setregion <nom>`.
-6. Sélectionnez le trou (la zone où l'équipe adverse doit sauter) de chaque équipe puis :
-   `/blitz setgoal red <nom>` et `/blitz setgoal blue <nom>`.
-7. Définissez les spawns : `/blitz setspawn red <nom>` et `/blitz setspawn blue <nom>`.
-8. Ajoutez des coffres de butin : regardez un coffre déjà posé dans la map puis
-   `/blitz addchest <nom>` (autant de fois que nécessaire).
-9. (Optionnel) `/blitz setlimit <nom> <score>` (5 par défaut) et
-   `/blitz setteamsize <nom> <1-8>` pour la taille maximale d'équipe (1v1 à 8v8).
-10. Les joueurs rejoignent avec `/blitz join <nom>`, `/blitz gui` (menu graphique avec option
-    aléatoire) ou en cliquant dans le menu.
+## 📄 Licence
 
-## Commandes joueurs
-- `/blitz join <arène>`
-- `/blitz leave`
-- `/blitz gui`
-- `/blitz stats [joueur]`
-
-## Commandes admin (`blitz.admin`)
-- `/blitz wand`, `/blitz create`, `/blitz delete`, `/blitz list`
-- `/blitz setlobby`, `/blitz setspawn <red|blue> <arène>`
-- `/blitz setregion <arène>`, `/blitz setgoal <red|blue> <arène>`
-- `/blitz setlimit <arène> <score>`, `/blitz setteamsize <arène> <1-8>`
-- `/blitz addchest <arène>`, `/blitz forcestart <arène>`
-- `/blitz hologram <wins|played|kd|kills>` (crée le classement holographique à vos pieds)
-- `/blitz delhologram` (supprime l'hologramme le plus proche)
-- `/blitz reload`
-
-## Fonctionnement du jeu
-- Blitz = 2 équipes (Rouge/Bleu), on marque en sautant dans le trou adverse.
-- Premier à atteindre le score configuré (5 par défaut) gagne.
-- La zone définie par `/blitz setregion` est protégée : impossible de casser les blocs
-  d'origine, mais on peut poser des blocs et casser ceux qu'on a soi-même posés.
-- Armure en cuir incassable (couleur d'équipe, non lâchable à la mort) + épée en bois incassable.
-- Coffres de butin (épée en pierre, laine/terracotta d'équipe, arc, flèches, pommes en or,
-  potions) qui se réapprovisionnent toutes les 10 minutes (configurable dans `config.yml`).
-- Sidebar en temps réel : nom du serveur, nom du jeu, map, temps, score des 2 équipes, K/D.
-- 4 hologrammes de classement invocables (victoires, parties jouées, K/D, kills - top 10).
+Ce plugin a été développé par l'équipe **HeroCraft**.

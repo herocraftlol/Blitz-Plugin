@@ -1,0 +1,26 @@
+# Configuration du plugin Blitz v2.0 - HeroCraft
+
+server-name: "HeroCraft"
+game-name: "Blitz"
+
+# Spawn du lobby global (rempli via /blitz setlobby)
+# Chaque arène peut aussi avoir son propre lobby via /blitz setarenalobby <arène>
+lobby:
+  world: ""
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  yaw: 0.0
+  pitch: 0.0
+
+# Temps en secondes avant le début de la partie une fois le minimum de joueurs atteint
+countdown-seconds: 15
+
+# Temps en secondes avant le redémarrage de l'arène après une victoire
+restart-seconds: 8
+
+# Intervalle de remplissage des coffres en secondes (10 minutes par défaut)
+chest-refill-seconds: 600
+
+# Score par défaut pour gagner (configurable par arène avec /blitz setlimit)
+default-score-limit: 5

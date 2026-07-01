@@ -91,6 +91,12 @@ public class Arena {
         this.snapshot = new RegionSnapshot(resetRegion);
     }
 
+    /** Supprime la zone de jeu (reset region) sans supprimer l'arène. */
+    public void clearResetRegion() {
+        this.resetRegion = null;
+        this.snapshot = null;
+    }
+
     public List<Location> getChestLocations() { return chestLocations; }
 
     public int getMaxPerTeam() { return maxPerTeam; }

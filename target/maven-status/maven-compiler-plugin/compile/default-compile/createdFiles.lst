@@ -1,5 +1,6 @@
 fr/herocraft/blitz/hologram/HologramManager.class
 fr/herocraft/blitz/hologram/HologramType.class
+fr/herocraft/blitz/listener/ChestListener.class
 fr/herocraft/blitz/team/Team.class
 fr/herocraft/blitz/storage/StatsManager.class
 fr/herocraft/blitz/util/LocationUtil.class

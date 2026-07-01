@@ -1,6 +1,6 @@
 # 🏆 Blitz - Plugin Minecraft (1.21) pour HeroCraft
 
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue)](https://github.com/herocraftlol/Blitz-Plugin/releases)
+[![Version](https://img.shields.io/badge/Version-2.0.1-blue)](https://github.com/herocraftlol/Blitz-Plugin/releases)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://www.minecraft.net/)
 [![Paper](https://img.shields.io/badge/Paper-1.21-orange)](https://papermc.io/)
 
@@ -81,6 +81,7 @@ Les joueurs rejoignent avec `/blitz join <arene>` pour une arène spécifique ou
 | `/blitz setlobby` | Définir le spawn lobby (position d'attente) |
 | `/blitz setspawn red/blue <arene>` | Définir les spawns d'équipe |
 | `/blitz setregion <arene>` | Définir la zone de réinitialisation |
+| `/blitz delregion <arene>` | Supprimer la zone de reset |
 | `/blitz setgoal red/blue <arene>` | Définir le goal de l'équipe |
 | `/blitz addchest <arene>` | Ajouter un coffre de butin |
 | `/blitz setlimit <arene> <score>` | Score pour gagner (défaut: 5) |
@@ -116,3 +117,20 @@ Le fichier JAR sera généré dans `target/Blitz.jar`.
 ## 📄 Licence
 
 Ce plugin a été développé par l'équipe **HeroCraft**.
+
+## 📋 Changelog
+
+### v2.0.1
+- Correction du bug PotionType.SPEED -> SWIFTNESS (compatibilité Paper 1.21)
+- Ajout de la commande `/blitz delregion` pour supprimer la zone de reset
+- Ajout du listener `ChestListener` pour la gestion des coffre
+- Améliorations générales et corrections de bugs
+
+### v2.0.0
+- Lobby d'attente avec retour automatique à la position initiale
+- Commande `/blitz joinrandom` pour rejoindre une arène aléatoire
+- GUI amélioré pour la sélection des arènes
+- Leaderboard holographique complet (wins, played, kd, kills)
+- Commande `/arenas` alias pour le GUI
+- Objets de lobby personnalisés
+- Système de retour position

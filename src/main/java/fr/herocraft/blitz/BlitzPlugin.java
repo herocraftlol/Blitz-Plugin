@@ -64,6 +64,7 @@ public class BlitzPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GuiListener(this), this);
         getServer().getPluginManager().registerEvents(new WandListener(this), this);
         getServer().getPluginManager().registerEvents(new LobbyItemListener(this), this);
+        getServer().getPluginManager().registerEvents(new ChestListener(this), this);
 
         BlitzCommand executor = new BlitzCommand(this);
         getCommand("blitz").setExecutor(executor);

@@ -33,7 +33,7 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
             "wand", "create", "delete", "list", "setlobby", "setarenalobby",
             "setspawn", "setregion", "setgoal", "setcapture", "setlimit",
             "setteamsize", "addchest", "forcestart", "reload",
-            "hologram", "delhologram");
+            "delregion", "hologram", "delhologram");
 
     public BlitzCommand(BlitzPlugin plugin) {
         this.plugin = plugin;
@@ -64,6 +64,7 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
             case "addchest"      -> handleAddChest(sender, args);
             case "forcestart"    -> handleForceStart(sender, args);
             case "reload"        -> handleReload(sender);
+            case "delregion"     -> handleDelRegion(sender, args);
             case "hologram"      -> handleHologram(sender, args);
             case "delhologram"   -> handleDelHologram(sender);
             default              -> sendHelp(sender);
@@ -226,6 +227,23 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
                 + ChatColor.GRAY + " (" + arena.getResetRegion().volume() + " blocs).");
     }
 
+    private void handleDelRegion(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz delregion <arène>");
+            return;
+        }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+        if (arena.getResetRegion() == null) {
+            sender.sendMessage(ChatColor.RED + "Cette arène n'a pas de zone de reset définie.");
+            return;
+        }
+        arena.setResetRegion(null);
+        plugin.getArenaManager().save();
+        sender.sendMessage(ChatColor.GREEN + "Zone de reset supprimée pour " + arena.getName() + ".");
+    }
+
     /** setgoal ET setcapture sont des alias l'un de l'autre. */
     private void handleSetGoal(CommandSender sender, String[] args) {
         if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
@@ -352,6 +370,7 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(ChatColor.YELLOW + "/blitz setarenalobby <arène>" + ChatColor.GRAY + " - Lobby propre à l'arène (attente avant partie)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setspawn <red|blue> <arène>" + ChatColor.GRAY + " - Spawn d'équipe (en partie)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setregion <arène>" + ChatColor.GRAY + " - Zone qui se réinitialise");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz delregion <arène>" + ChatColor.GRAY + " - Supprimer la zone de jeu (sans supprimer l'arène)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setgoal <red|blue> <arène>" + ChatColor.GRAY + " - Zone de capture (alias: setcapture)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setlimit <arène> <score>" + ChatColor.GRAY + " - Score pour gagner");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setteamsize <arène> <1-8>" + ChatColor.GRAY + " - Taille d'équipe max");
@@ -372,7 +391,7 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2) {
             String sub = args[0].toLowerCase(Locale.ROOT);
-            if (List.of("join", "delete", "setregion", "addchest", "forcestart", "setlimit", "setteamsize", "setarenalobby").contains(sub)) {
+            if (List.of("join", "delete", "setregion", "delregion", "addchest", "forcestart", "setlimit", "setteamsize", "setarenalobby").contains(sub)) {
                 return arenaNames(args[1]);
             }
             if (List.of("setspawn", "setgoal", "setcapture").contains(sub)) {

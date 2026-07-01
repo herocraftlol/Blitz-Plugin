@@ -1,10 +1,9 @@
-# Configuration du plugin Blitz v2.0 - HeroCraft
+# Configuration du plugin Blitz v2.1 - HeroCraft
 
 server-name: "HeroCraft"
 game-name: "Blitz"
 
 # Spawn du lobby global (rempli via /blitz setlobby)
-# Chaque arène peut aussi avoir son propre lobby via /blitz setarenalobby <arène>
 lobby:
   world: ""
   x: 0.0
@@ -13,14 +12,20 @@ lobby:
   yaw: 0.0
   pitch: 0.0
 
-# Temps en secondes avant le début de la partie une fois le minimum de joueurs atteint
+# Temps en secondes avant le début de la partie
 countdown-seconds: 15
 
-# Temps en secondes avant le redémarrage de l'arène après une victoire
+# Temps en secondes avant le redémarrage de l'arène après victoire
 restart-seconds: 8
 
-# Intervalle de remplissage des coffres en secondes (10 minutes par défaut)
+# Intervalle de restauration des coffres en secondes (10 min par défaut)
 chest-refill-seconds: 600
 
-# Score par défaut pour gagner (configurable par arène avec /blitz setlimit)
+# Score par défaut pour gagner
 default-score-limit: 5
+
+# Blocs que les joueurs peuvent casser pendant la partie (en plus des blocs qu'ils ont posés).
+# Utile pour les toiles (cobweb), par exemple.
+# Format : liste de noms de Material Bukkit (ex: COBWEB, GRASS, etc.)
+breakable-blocks:
+  - COBWEB

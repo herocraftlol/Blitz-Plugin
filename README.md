@@ -1,6 +1,6 @@
 # 🏆 Blitz - Plugin Minecraft (1.21) pour HeroCraft
 
-[![Version](https://img.shields.io/badge/Version-2.0.1-blue)](https://github.com/herocraftlol/Blitz-Plugin/releases)
+[![Version](https://img.shields.io/badge/Version-2.0.2-blue)](https://github.com/herocraftlol/Blitz-Plugin/releases)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://www.minecraft.net/)
 [![Paper](https://img.shields.io/badge/Paper-1.21-orange)](https://papermc.io/)
 
@@ -119,6 +119,11 @@ Le fichier JAR sera généré dans `target/Blitz.jar`.
 Ce plugin a été développé par l'équipe **HeroCraft**.
 
 ## 📋 Changelog
+
+### v2.0.2
+- Ameliorations et nouvelles fonctionnalités
+- Corrections de bugs
+- Optimisations du code
 
 ### v2.0.1
 - Correction du bug PotionType.SPEED -> SWIFTNESS (compatibilité Paper 1.21)

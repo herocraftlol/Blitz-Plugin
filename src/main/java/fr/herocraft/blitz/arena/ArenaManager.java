@@ -1,10 +1,12 @@
 package fr.herocraft.blitz.arena;
 
 import fr.herocraft.blitz.BlitzPlugin;
+import fr.herocraft.blitz.team.Team;
 import fr.herocraft.blitz.util.LocationUtil;
 import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,10 +49,6 @@ public class ArenaManager {
 
     public Collection<Arena> getAll() { return arenas.values(); }
 
-    /**
-     * Meilleure arène disponible pour joinrandom.
-     * Priorité : arènes avec joueurs déjà présents, puis arènes vides.
-     */
     public Arena findBestJoinable() {
         List<Arena> joinable = new ArrayList<>();
         for (Arena a : arenas.values()) {
@@ -59,11 +57,7 @@ public class ArenaManager {
             }
         }
         if (joinable.isEmpty()) return null;
-
-        // Priorité : arène la plus peuplée déjà en attente
         joinable.sort(Comparator.comparingInt(Arena::getPlayerCount).reversed());
-
-        // Parmi celles avec le même nombre max de joueurs, choisir aléatoirement
         int maxPop = joinable.get(0).getPlayerCount();
         List<Arena> top = new ArrayList<>();
         for (Arena a : joinable) {
@@ -79,6 +73,7 @@ public class ArenaManager {
         save();
     }
 
+    @SuppressWarnings("unchecked")
     public void load() {
         if (!file.exists()) return;
         YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
@@ -94,21 +89,47 @@ public class ArenaManager {
             arena.setBlueSpawn(LocationUtil.load(s, "blue-spawn"));
             arena.setArenaLobbySpawn(LocationUtil.load(s, "arena-lobby-spawn"));
 
-            CuboidRegion redGoal = CuboidRegion.load(s, "red-goal");
-            CuboidRegion blueGoal = CuboidRegion.load(s, "blue-goal");
+            CuboidRegion redGoal   = CuboidRegion.load(s, "red-goal");
+            CuboidRegion blueGoal  = CuboidRegion.load(s, "blue-goal");
             CuboidRegion resetRegion = CuboidRegion.load(s, "reset-region");
-            if (redGoal != null) arena.setRedGoal(redGoal);
-            if (blueGoal != null) arena.setBlueGoal(blueGoal);
+            if (redGoal != null)    arena.setRedGoal(redGoal);
+            if (blueGoal != null)   arena.setBlueGoal(blueGoal);
             if (resetRegion != null) arena.setResetRegion(resetRegion);
 
             arena.setMaxPerTeam(s.getInt("max-per-team", 8));
             arena.setScoreLimit(s.getInt("score-limit", plugin.getConfig().getInt("default-score-limit", 5)));
 
-            List<String> chestList = s.getStringList("chests");
-            for (String chestStr : chestList) {
-                Location loc = LocationUtil.deserializeSimple(chestStr);
-                if (loc != null) arena.getChestLocations().add(loc);
+            // Charger les coffres d'équipe (nouveau format)
+            ConfigurationSection chestsSection = s.getConfigurationSection("team-chests");
+            if (chestsSection != null) {
+                for (String cKey : chestsSection.getKeys(false)) {
+                    ConfigurationSection cs = chestsSection.getConfigurationSection(cKey);
+                    if (cs == null) continue;
+                    Location loc = LocationUtil.deserializeSimple(cs.getString("location", ""));
+                    if (loc == null) continue;
+                    String teamStr = cs.getString("team", "RED");
+                    Team team;
+                    try { team = Team.valueOf(teamStr.toUpperCase()); } catch (Exception e) { continue; }
+                    int index = cs.getInt("index", 1);
+                    List<?> rawContents = cs.getList("contents");
+                    ItemStack[] contents = new ItemStack[0];
+                    if (rawContents != null) {
+                        contents = rawContents.stream()
+                                .filter(o -> o instanceof ItemStack)
+                                .map(o -> (ItemStack) o)
+                                .toArray(ItemStack[]::new);
+                    }
+                    arena.getTeamChests().add(new Arena.ChestEntry(loc, team, index, contents));
+                }
             }
+
+            // Charger les spawners de lingots
+            List<String> spawnerList = s.getStringList("iron-spawners");
+            for (String locStr : spawnerList) {
+                Location loc = LocationUtil.deserializeSimple(locStr);
+                if (loc != null) arena.getIronSpawners().add(new Arena.IronSpawner(loc));
+            }
+
             arenas.put(key.toLowerCase(Locale.ROOT), arena);
         }
     }
@@ -119,17 +140,34 @@ public class ArenaManager {
         for (Arena arena : arenas.values()) {
             String path = "arenas." + arena.getName().toLowerCase(Locale.ROOT);
             cfg.set(path + ".name", arena.getName());
-            if (arena.getRedSpawn() != null) LocationUtil.save(cfg, path + ".red-spawn", arena.getRedSpawn());
-            if (arena.getBlueSpawn() != null) LocationUtil.save(cfg, path + ".blue-spawn", arena.getBlueSpawn());
+            if (arena.getRedSpawn() != null)       LocationUtil.save(cfg, path + ".red-spawn", arena.getRedSpawn());
+            if (arena.getBlueSpawn() != null)      LocationUtil.save(cfg, path + ".blue-spawn", arena.getBlueSpawn());
             if (arena.getArenaLobbySpawn() != null) LocationUtil.save(cfg, path + ".arena-lobby-spawn", arena.getArenaLobbySpawn());
-            if (arena.getRedGoal() != null) arena.getRedGoal().save(cfg, path + ".red-goal");
-            if (arena.getBlueGoal() != null) arena.getBlueGoal().save(cfg, path + ".blue-goal");
-            if (arena.getResetRegion() != null) arena.getResetRegion().save(cfg, path + ".reset-region");
+            if (arena.getRedGoal() != null)         arena.getRedGoal().save(cfg, path + ".red-goal");
+            if (arena.getBlueGoal() != null)        arena.getBlueGoal().save(cfg, path + ".blue-goal");
+            if (arena.getResetRegion() != null)     arena.getResetRegion().save(cfg, path + ".reset-region");
             cfg.set(path + ".max-per-team", arena.getMaxPerTeam());
             cfg.set(path + ".score-limit", arena.getScoreLimit());
-            List<String> chestList = new ArrayList<>();
-            for (Location loc : arena.getChestLocations()) chestList.add(LocationUtil.serializeSimple(loc));
-            cfg.set(path + ".chests", chestList);
+
+            // Sauvegarder les coffres d'équipe
+            int cIdx = 0;
+            for (Arena.ChestEntry entry : arena.getTeamChests()) {
+                String cp = path + ".team-chests.chest_" + cIdx;
+                cfg.set(cp + ".location", LocationUtil.serializeSimple(entry.location));
+                cfg.set(cp + ".team", entry.team.name());
+                cfg.set(cp + ".index", entry.index);
+                if (entry.savedContents != null) {
+                    cfg.set(cp + ".contents", Arrays.asList(entry.savedContents));
+                }
+                cIdx++;
+            }
+
+            // Sauvegarder les spawners de lingots
+            List<String> spawnerList = new ArrayList<>();
+            for (Arena.IronSpawner sp : arena.getIronSpawners()) {
+                spawnerList.add(LocationUtil.serializeSimple(sp.location));
+            }
+            cfg.set(path + ".iron-spawners", spawnerList);
         }
         try { cfg.save(file); }
         catch (IOException e) { plugin.getLogger().warning("Impossible de sauvegarder arenas.yml: " + e.getMessage()); }

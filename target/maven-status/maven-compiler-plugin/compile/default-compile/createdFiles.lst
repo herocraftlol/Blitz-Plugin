@@ -10,10 +10,12 @@ fr/herocraft/blitz/listener/GuiListener.class
 fr/herocraft/blitz/command/BlitzCommand.class
 fr/herocraft/blitz/listener/LobbyItemListener.class
 fr/herocraft/blitz/listener/WandListener.class
+fr/herocraft/blitz/arena/Arena$ChestEntry.class
 fr/herocraft/blitz/storage/PlayerStats.class
 fr/herocraft/blitz/listener/PlayerConnectionListener.class
 fr/herocraft/blitz/arena/CuboidRegion.class
 fr/herocraft/blitz/util/ItemBuilder.class
+fr/herocraft/blitz/arena/Arena$IronSpawner.class
 fr/herocraft/blitz/hologram/HologramManager$1.class
 fr/herocraft/blitz/arena/RegionSnapshot.class
 fr/herocraft/blitz/hologram/HologramManager$HologramEntry.class

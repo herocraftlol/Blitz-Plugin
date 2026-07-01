@@ -2,6 +2,7 @@ package fr.herocraft.blitz.command;
 
 import fr.herocraft.blitz.BlitzPlugin;
 import fr.herocraft.blitz.arena.Arena;
+import fr.herocraft.blitz.arena.Arena.ChestEntry;
 import fr.herocraft.blitz.arena.CuboidRegion;
 import fr.herocraft.blitz.hologram.HologramType;
 import fr.herocraft.blitz.storage.PlayerStats;
@@ -32,7 +33,9 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
     private static final List<String> ADMIN_SUBS  = List.of(
             "wand", "create", "delete", "list", "setlobby", "setarenalobby",
             "setspawn", "setregion", "setgoal", "setcapture", "setlimit",
-            "setteamsize", "addchest", "forcestart", "reload",
+            "setteamsize", "addchest", "chest", "removechest",
+            "addironspawner", "ironspawner",
+            "forcestart", "reload",
             "delregion", "hologram", "delhologram");
 
     public BlitzCommand(BlitzPlugin plugin) {
@@ -62,6 +65,10 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
             case "setlimit"      -> handleSetLimit(sender, args);
             case "setteamsize"   -> handleSetTeamSize(sender, args);
             case "addchest"      -> handleAddChest(sender, args);
+            case "chest"         -> handleChestList(sender, args);
+            case "removechest"   -> handleRemoveChest(sender, args);
+            case "addironspawner" -> handleAddIronSpawner(sender, args);
+            case "ironspawner"   -> handleIronSpawnerList(sender, args);
             case "forcestart"    -> handleForceStart(sender, args);
             case "reload"        -> handleReload(sender);
             case "delregion"     -> handleDelRegion(sender, args);
@@ -177,10 +184,6 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GREEN + "Spawn du lobby global défini.");
     }
 
-    /**
-     * Définit le spawn du lobby propre à une arène (où les joueurs attendent avant le début).
-     * Usage : /blitz setarenalobby <arène>
-     */
     private void handleSetArenaLobby(CommandSender sender, String[] args) {
         if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
         if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /blitz setarenalobby <arène>"); return; }
@@ -190,7 +193,6 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         plugin.getArenaManager().save();
         sender.sendMessage(ChatColor.GREEN + "Lobby propre à l'arène " + ChatColor.GOLD + arena.getName()
                 + ChatColor.GREEN + " défini à votre position.");
-        sender.sendMessage(ChatColor.GRAY + "(Les joueurs qui rejoignent cette arène seront téléportés ici en attente de partie.)");
     }
 
     private void handleSetSpawn(CommandSender sender, String[] args) {
@@ -227,24 +229,6 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
                 + ChatColor.GRAY + " (" + arena.getResetRegion().volume() + " blocs).");
     }
 
-    private void handleDelRegion(CommandSender sender, String[] args) {
-        if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
-        if (args.length < 2) {
-            sender.sendMessage(ChatColor.RED + "Usage: /blitz delregion <arène>");
-            return;
-        }
-        Arena arena = plugin.getArenaManager().get(args[1]);
-        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
-        if (arena.getResetRegion() == null) {
-            sender.sendMessage(ChatColor.RED + "Cette arène n'a pas de zone de reset définie.");
-            return;
-        }
-        arena.setResetRegion(null);
-        plugin.getArenaManager().save();
-        sender.sendMessage(ChatColor.GREEN + "Zone de reset supprimée pour " + arena.getName() + ".");
-    }
-
-    /** setgoal ET setcapture sont des alias l'un de l'autre. */
     private void handleSetGoal(CommandSender sender, String[] args) {
         if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
         if (args.length < 3) {
@@ -302,19 +286,159 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /**
+     * /blitz addchest <arène> <red|blue>
+     *
+     * Ajoute le coffre regardé par le joueur à l'équipe spécifiée.
+     * Le numéro est attribué automatiquement (1, 2, 3…).
+     * Le contenu ACTUEL du coffre est sauvegardé comme loot fixe.
+     */
     private void handleAddChest(CommandSender sender, String[] args) {
         if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
-        if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /blitz addchest <arène> (regardez un coffre)"); return; }
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz addchest <arène> <red|blue> (regardez un coffre)");
+            return;
+        }
         Arena arena = plugin.getArenaManager().get(args[1]);
         if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+
+        Team team;
+        try {
+            team = Team.valueOf(args[2].toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ChatColor.RED + "Équipe invalide (red/blue).");
+            return;
+        }
+
         Block target = player.getTargetBlockExact(6);
         if (target == null || !(target.getState() instanceof Chest)) {
             sender.sendMessage(ChatColor.RED + "Regardez un coffre pour l'ajouter (distance max 6 blocs)."); return;
         }
-        arena.getChestLocations().add(target.getLocation());
+
+        ChestEntry entry = arena.addTeamChest(target.getLocation(), team);
         plugin.getArenaManager().save();
-        sender.sendMessage(ChatColor.GREEN + "Coffre ajouté à l'arène " + arena.getName()
-                + ChatColor.GRAY + " (" + arena.getChestLocations().size() + " au total).");
+        sender.sendMessage(ChatColor.GREEN + "Coffre " + team.getChatColor() + team.getDisplayName()
+                + ChatColor.GREEN + " #" + entry.index + " ajouté à l'arène " + arena.getName()
+                + ChatColor.GRAY + " (contenu sauvegardé : " + countItems(entry.savedContents) + " stacks).");
+    }
+
+    /**
+     * /blitz chest <arène> <red|blue> list
+     *
+     * Liste les coffres d'une équipe avec leurs coordonnées.
+     */
+    private void handleChestList(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender)) return;
+        if (args.length < 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz chest <arène> <red|blue> list");
+            return;
+        }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+
+        Team team;
+        try {
+            team = Team.valueOf(args[2].toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ChatColor.RED + "Équipe invalide (red/blue).");
+            return;
+        }
+
+        sender.sendMessage(ChatColor.GOLD + "=== Coffres " + team.getChatColor() + team.getDisplayName()
+                + ChatColor.GOLD + " – " + arena.getName() + " ===");
+        boolean found = false;
+        for (ChestEntry e : arena.getTeamChests()) {
+            if (e.team != team) continue;
+            found = true;
+            Location loc = e.location;
+            sender.sendMessage(team.getChatColor() + "#" + e.index + ChatColor.GRAY + " → "
+                    + ChatColor.WHITE + "X:" + loc.getBlockX() + " Y:" + loc.getBlockY() + " Z:" + loc.getBlockZ()
+                    + ChatColor.GRAY + " (monde: " + (loc.getWorld() != null ? loc.getWorld().getName() : "?") + ")"
+                    + " | " + countItems(e.savedContents) + " stacks sauvegardés");
+        }
+        if (!found) sender.sendMessage(ChatColor.GRAY + "Aucun coffre enregistré pour cette équipe.");
+    }
+
+    /**
+     * /blitz removechest <arène> <red|blue> <numéro>
+     */
+    private void handleRemoveChest(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender)) return;
+        if (args.length < 4) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz removechest <arène> <red|blue> <numéro>");
+            return;
+        }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+
+        Team team;
+        try { team = Team.valueOf(args[2].toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException e) { sender.sendMessage(ChatColor.RED + "Équipe invalide (red/blue)."); return; }
+
+        int idx;
+        try { idx = Integer.parseInt(args[3]); }
+        catch (NumberFormatException e) { sender.sendMessage(ChatColor.RED + "Numéro invalide."); return; }
+
+        boolean removed = arena.getTeamChests().removeIf(e -> e.team == team && e.index == idx);
+        if (removed) {
+            plugin.getArenaManager().save();
+            sender.sendMessage(ChatColor.GREEN + "Coffre " + team.getChatColor() + team.getDisplayName()
+                    + ChatColor.GREEN + " #" + idx + " supprimé.");
+        } else {
+            sender.sendMessage(ChatColor.RED + "Coffre introuvable.");
+        }
+    }
+
+    /**
+     * /blitz addironspawner <arène>
+     *
+     * Crée un spawner de lingots de fer à la position actuelle du joueur.
+     * Il spawn un lingot de fer par terre toutes les 60 secondes lors d'une partie.
+     */
+    private void handleAddIronSpawner(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender) || !(sender instanceof Player player)) return;
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz addironspawner <arène>");
+            return;
+        }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+
+        Arena.IronSpawner spawner = arena.addIronSpawner(player.getLocation());
+        plugin.getArenaManager().save();
+        Location loc = spawner.location;
+        sender.sendMessage(ChatColor.GREEN + "Spawner de lingots de fer ajouté à "
+                + ChatColor.WHITE + "X:" + loc.getBlockX() + " Y:" + loc.getBlockY() + " Z:" + loc.getBlockZ()
+                + ChatColor.GREEN + " pour l'arène " + arena.getName()
+                + ChatColor.GRAY + " (total: " + arena.getIronSpawners().size() + ").");
+        sender.sendMessage(ChatColor.GRAY + "Un lingot de fer sera dropé toutes les 60 secondes dès le lancement.");
+    }
+
+    /**
+     * /blitz ironspawner <arène> list
+     */
+    private void handleIronSpawnerList(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender)) return;
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "Usage: /blitz ironspawner <arène> list");
+            return;
+        }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+
+        sender.sendMessage(ChatColor.GOLD + "=== Spawners de lingots – " + arena.getName() + " ===");
+        if (arena.getIronSpawners().isEmpty()) {
+            sender.sendMessage(ChatColor.GRAY + "Aucun spawner configuré.");
+            return;
+        }
+        int i = 1;
+        for (Arena.IronSpawner sp : arena.getIronSpawners()) {
+            Location loc = sp.location;
+            sender.sendMessage(ChatColor.YELLOW + "#" + i + ChatColor.GRAY + " → "
+                    + ChatColor.WHITE + "X:" + loc.getBlockX() + " Y:" + loc.getBlockY() + " Z:" + loc.getBlockZ()
+                    + ChatColor.GRAY + " (monde: " + (loc.getWorld() != null ? loc.getWorld().getName() : "?") + ")");
+            i++;
+        }
     }
 
     private void handleForceStart(CommandSender sender, String[] args) {
@@ -330,7 +454,19 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
     private void handleReload(CommandSender sender) {
         if (!checkAdmin(sender)) return;
         plugin.reloadConfig();
+        // Recharger aussi les blocs cassables
+        plugin.reloadBreakableBlocks();
         sender.sendMessage(ChatColor.GREEN + "Configuration rechargée.");
+    }
+
+    private void handleDelRegion(CommandSender sender, String[] args) {
+        if (!checkAdmin(sender)) return;
+        if (args.length < 2) { sender.sendMessage(ChatColor.RED + "Usage: /blitz delregion <arène>"); return; }
+        Arena arena = plugin.getArenaManager().get(args[1]);
+        if (arena == null) { sender.sendMessage(ChatColor.RED + "Arène introuvable."); return; }
+        arena.clearResetRegion();
+        plugin.getArenaManager().save();
+        sender.sendMessage(ChatColor.GREEN + "Zone de jeu supprimée (l'arène est conservée).");
     }
 
     private void handleHologram(CommandSender sender, String[] args) {
@@ -355,31 +491,42 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
 
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(ChatColor.GOLD + "" + ChatColor.BOLD + "=== Blitz - HeroCraft ===");
-        sender.sendMessage(ChatColor.YELLOW + "/blitz join <arène>" + ChatColor.GRAY + " - Rejoindre une arène (lobby d'attente)");
+        sender.sendMessage(ChatColor.YELLOW + "/blitz join <arène>" + ChatColor.GRAY + " - Rejoindre une arène");
         sender.sendMessage(ChatColor.YELLOW + "/blitz joinrandom" + ChatColor.GRAY + " - Rejoindre une arène aléatoire");
         sender.sendMessage(ChatColor.YELLOW + "/blitz leave" + ChatColor.GRAY + " - Quitter et retourner à votre position");
         sender.sendMessage(ChatColor.YELLOW + "/blitz gui" + ChatColor.GRAY + " - Ouvrir le menu des arènes");
         sender.sendMessage(ChatColor.YELLOW + "/blitz stats [joueur]" + ChatColor.GRAY + " - Voir des statistiques");
         if (sender.hasPermission("blitz.admin")) {
             sender.sendMessage(ChatColor.AQUA + "--- Administration ---");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz wand" + ChatColor.GRAY + " - Baguette de sélection");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz wand" + ChatColor.GRAY + " - Baguette de sélection (pos1/pos2)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz create <nom>" + ChatColor.GRAY + " - Créer une arène");
             sender.sendMessage(ChatColor.YELLOW + "/blitz delete <nom>" + ChatColor.GRAY + " - Supprimer une arène");
             sender.sendMessage(ChatColor.YELLOW + "/blitz list" + ChatColor.GRAY + " - Lister les arènes");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setlobby" + ChatColor.GRAY + " - Spawn du lobby global");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz setarenalobby <arène>" + ChatColor.GRAY + " - Lobby propre à l'arène (attente avant partie)");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz setspawn <red|blue> <arène>" + ChatColor.GRAY + " - Spawn d'équipe (en partie)");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz setregion <arène>" + ChatColor.GRAY + " - Zone qui se réinitialise");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz delregion <arène>" + ChatColor.GRAY + " - Supprimer la zone de jeu (sans supprimer l'arène)");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz setgoal <red|blue> <arène>" + ChatColor.GRAY + " - Zone de capture (alias: setcapture)");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz setarenalobby <arène>" + ChatColor.GRAY + " - Lobby de l'arène");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz setspawn <red|blue> <arène>" + ChatColor.GRAY + " - Spawn d'équipe");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz setregion <arène>" + ChatColor.GRAY + " - Zone de reset (wand)");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz delregion <arène>" + ChatColor.GRAY + " - Supprimer la zone de reset");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz setgoal <red|blue> <arène>" + ChatColor.GRAY + " - Zone de but (wand, alias: setcapture)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setlimit <arène> <score>" + ChatColor.GRAY + " - Score pour gagner");
             sender.sendMessage(ChatColor.YELLOW + "/blitz setteamsize <arène> <1-8>" + ChatColor.GRAY + " - Taille d'équipe max");
-            sender.sendMessage(ChatColor.YELLOW + "/blitz addchest <arène>" + ChatColor.GRAY + " - Ajouter un coffre (regardez-le)");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz addchest <arène> <red|blue>" + ChatColor.GRAY + " - Ajouter un coffre (regardez-le)");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz chest <arène> <red|blue> list" + ChatColor.GRAY + " - Lister les coffres avec coordonnées");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz removechest <arène> <red|blue> <n°>" + ChatColor.GRAY + " - Supprimer un coffre");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz addironspawner <arène>" + ChatColor.GRAY + " - Créer un spawner de lingots de fer (à votre position)");
+            sender.sendMessage(ChatColor.YELLOW + "/blitz ironspawner <arène> list" + ChatColor.GRAY + " - Lister les spawners de lingots");
             sender.sendMessage(ChatColor.YELLOW + "/blitz forcestart <arène>" + ChatColor.GRAY + " - Forcer le début");
             sender.sendMessage(ChatColor.YELLOW + "/blitz hologram <type>" + ChatColor.GRAY + " - Classement hologramme (wins/played/kd/kills)");
             sender.sendMessage(ChatColor.YELLOW + "/blitz delhologram" + ChatColor.GRAY + " - Supprimer l'hologramme proche");
             sender.sendMessage(ChatColor.YELLOW + "/blitz reload" + ChatColor.GRAY + " - Recharger la config");
         }
+    }
+
+    private int countItems(ItemStack[] contents) {
+        if (contents == null) return 0;
+        int count = 0;
+        for (ItemStack item : contents) if (item != null) count++;
+        return count;
     }
 
     @Override
@@ -391,7 +538,8 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2) {
             String sub = args[0].toLowerCase(Locale.ROOT);
-            if (List.of("join", "delete", "setregion", "delregion", "addchest", "forcestart", "setlimit", "setteamsize", "setarenalobby").contains(sub)) {
+            if (List.of("join", "delete", "setregion", "delregion", "addchest", "chest", "removechest",
+                    "addironspawner", "ironspawner", "forcestart", "setlimit", "setteamsize", "setarenalobby").contains(sub)) {
                 return arenaNames(args[1]);
             }
             if (List.of("setspawn", "setgoal", "setcapture").contains(sub)) {
@@ -410,6 +558,18 @@ public class BlitzCommand implements CommandExecutor, TabCompleter {
         if (args.length == 3) {
             String sub = args[0].toLowerCase(Locale.ROOT);
             if (List.of("setspawn", "setgoal", "setcapture").contains(sub)) return arenaNames(args[2]);
+            if (List.of("addchest", "chest", "removechest").contains(sub)) {
+                return List.of("red", "blue").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
+            }
+            if (sub.equals("ironspawner")) {
+                return List.of("list").stream().filter(s -> s.startsWith(args[2].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
+            }
+        }
+        if (args.length == 4) {
+            String sub = args[0].toLowerCase(Locale.ROOT);
+            if (sub.equals("chest")) {
+                return List.of("list").stream().filter(s -> s.startsWith(args[3].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
+            }
         }
         return Collections.emptyList();
     }

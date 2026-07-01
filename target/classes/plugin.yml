@@ -1,0 +1,20 @@
+name: Blitz
+version: 1.0.0
+main: fr.herocraft.blitz.BlitzPlugin
+api-version: '1.21'
+author: HeroCraft
+description: Plugin Blitz - marquez en sautant dans le trou adverse !
+
+commands:
+  blitz:
+    description: Commande principale du plugin Blitz
+    usage: /blitz <join|leave|gui|stats|...>
+    aliases: [bz]
+
+permissions:
+  blitz.admin:
+    description: Accès aux commandes d'administration du Blitz
+    default: op
+  blitz.play:
+    description: Accès au jeu Blitz
+    default: true

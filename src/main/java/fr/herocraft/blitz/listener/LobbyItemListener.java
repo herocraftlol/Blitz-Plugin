@@ -62,7 +62,10 @@ public class LobbyItemListener implements Listener {
                 player.sendMessage(ChatColor.RED + "L'arène n'est pas configurée.");
                 return;
             }
-            arena.forceStart();
+            if (!arena.forceStart()) {
+                player.sendMessage(ChatColor.RED + "Impossible de démarrer : il faut au moins 1 joueur par équipe !");
+                return;
+            }
             player.sendMessage(ChatColor.GREEN + "Partie forcée pour " + arena.getName() + ".");
             return;
         }

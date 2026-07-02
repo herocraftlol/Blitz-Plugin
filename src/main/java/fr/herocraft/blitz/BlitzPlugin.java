@@ -25,14 +25,13 @@ public class BlitzPlugin extends JavaPlugin {
     private SidebarManager sidebarManager;
     private HologramManager hologramManager;
     private ArenaSelectorGUI arenaSelectorGUI;
+    private BlockProtectionListener blockProtectionListener;
 
-    // Clés PDC existantes
+    // Clés PDC
     private NamespacedKey kitKey;
     private NamespacedKey wandKey;
     private NamespacedKey guiArenaKey;
     private NamespacedKey guiRandomKey;
-
-    // Clés PDC pour items de lobby
     private NamespacedKey lobbyLeaveKey;
     private NamespacedKey lobbyForceStartKey;
     private NamespacedKey lobbyTeamKey;
@@ -57,8 +56,10 @@ public class BlitzPlugin extends JavaPlugin {
         hologramManager = new HologramManager(this);
         arenaSelectorGUI = new ArenaSelectorGUI(this);
 
+        blockProtectionListener = new BlockProtectionListener(this);
+
         getServer().getPluginManager().registerEvents(new PlayerConnectionListener(this), this);
-        getServer().getPluginManager().registerEvents(new BlockProtectionListener(this), this);
+        getServer().getPluginManager().registerEvents(blockProtectionListener, this);
         getServer().getPluginManager().registerEvents(new GoalListener(this), this);
         getServer().getPluginManager().registerEvents(new CombatListener(this), this);
         getServer().getPluginManager().registerEvents(new GuiListener(this), this);
@@ -71,7 +72,6 @@ public class BlitzPlugin extends JavaPlugin {
         getCommand("blitz").setExecutor(executor);
         getCommand("blitz").setTabCompleter(executor);
 
-        // Alias /arenas
         getCommand("arenas").setExecutor((sender, cmd, label, args) -> {
             executor.onCommand(sender, cmd, label, new String[]{"gui"});
             return true;
@@ -90,6 +90,11 @@ public class BlitzPlugin extends JavaPlugin {
         if (hologramManager != null) { hologramManager.save(); hologramManager.shutdownDespawnAll(); }
     }
 
+    /** Recharge la liste des blocs cassables depuis la config. */
+    public void reloadBreakableBlocks() {
+        if (blockProtectionListener != null) blockProtectionListener.reloadBreakableBlocks();
+    }
+
     public Arena findArenaOf(Player player) {
         for (Arena arena : arenaManager.getAll()) {
             if (arena.getPlayers().containsKey(player.getUniqueId())) return arena;
@@ -97,10 +102,6 @@ public class BlitzPlugin extends JavaPlugin {
         return null;
     }
 
-    /**
-     * Fait rejoindre un joueur dans l'arène (lobby d'attente).
-     * La position d'avant le join est sauvegardée automatiquement par Arena.addPlayer().
-     */
     public void joinArena(Player player, Arena arena) {
         Arena current = findArenaOf(player);
         if (current != null) {
@@ -125,9 +126,6 @@ public class BlitzPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GRAY + "Utilisez l'item en slot 8 pour quitter et retourner à votre position.");
     }
 
-    /**
-     * Retire le joueur de son arène et le renvoie à sa position d'avant le join.
-     */
     public void leaveArena(Player player) {
         Arena arena = findArenaOf(player);
         if (arena == null) {

@@ -22,7 +22,7 @@ public class OutOfBoundsListener implements Listener {
 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
-        // Optimisation : ignorer si seule la direction du regard a changé
+        // Optimisation : ignorer si seule la direction du regard a changé (pas de déplacement de bloc)
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()
                 && event.getFrom().getBlockY() == event.getTo().getBlockY()
                 && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) {
@@ -33,7 +33,7 @@ public class OutOfBoundsListener implements Listener {
         Arena arena = plugin.findArenaOf(player);
         if (arena == null || arena.getState() != ArenaState.PLAYING) return;
 
-        // Si le joueur est hors de la zone de jeu, il meurt
+        // Si le joueur sort de la zone de jeu, il meurt instantanément
         if (!arena.isInResetRegion(event.getTo())) {
             player.sendMessage(ChatColor.RED + "Vous êtes sorti de la zone de jeu !");
             player.setHealth(0.0);

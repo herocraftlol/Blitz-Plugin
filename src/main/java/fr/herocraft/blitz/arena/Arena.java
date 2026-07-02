@@ -7,17 +7,15 @@ import fr.herocraft.blitz.util.ItemBuilder;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.potion.PotionType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class Arena {
 
@@ -26,12 +24,16 @@ public class Arena {
 
     private Location redSpawn;
     private Location blueSpawn;
-    /** Spawn du lobby PROPRE à cette arène (joueurs en attente de partie). */
     private Location arenaLobbySpawn;
     private CuboidRegion redGoal;
     private CuboidRegion blueGoal;
     private CuboidRegion resetRegion;
-    private final List<Location> chestLocations = new ArrayList<>();
+
+    /**
+     * Coffres de l'arène : chaque entrée contient la location du coffre,
+     * l'équipe propriétaire, un numéro d'index et le contenu sauvegardé.
+     */
+    private final List<ChestEntry> teamChests = new ArrayList<>();
 
     private int maxPerTeam = 8;
     private int scoreLimit = 5;
@@ -41,7 +43,6 @@ public class Arena {
     private final Map<Team, Integer> scores = new EnumMap<>(Team.class);
     private final Set<String> placedBlocks = new HashSet<>();
 
-    /** Positions des joueurs AVANT qu'ils rejoignent ce lobby (pour y retourner au leave). */
     private final Map<UUID, Location> preLobbyLocations = new HashMap<>();
 
     private RegionSnapshot snapshot;
@@ -52,11 +53,36 @@ public class Arena {
     private BukkitTask chestRefillTask;
     private BukkitTask restartTask;
 
-    // Clés PDC pour les items de lobby
+    // Spawner de lingots
+    private final List<IronSpawner> ironSpawners = new ArrayList<>();
+    private BukkitTask ironSpawnerTask;
+
+    // Clés PDC lobby
     private static final String LEAVE_TAG   = "blitz_lobby_leave";
     private static final String FSTART_TAG  = "blitz_lobby_forcestart";
     private static final String TEAM_R_TAG  = "blitz_team_red";
     private static final String TEAM_B_TAG  = "blitz_team_blue";
+
+    // ---- Classe interne pour les coffres d'équipe ----
+    public static class ChestEntry {
+        public Location location;
+        public Team team;
+        public int index; // numéro affiché (1, 2, 3…)
+        public ItemStack[] savedContents; // contenu enregistré au moment du addchest
+
+        public ChestEntry(Location location, Team team, int index, ItemStack[] savedContents) {
+            this.location = location;
+            this.team = team;
+            this.index = index;
+            this.savedContents = savedContents;
+        }
+    }
+
+    // ---- Classe interne pour les spawners de lingots ----
+    public static class IronSpawner {
+        public Location location;
+        public IronSpawner(Location location) { this.location = location; }
+    }
 
     public Arena(BlitzPlugin plugin, String name) {
         this.plugin = plugin;
@@ -65,7 +91,7 @@ public class Arena {
         scores.put(Team.BLUE, 0);
     }
 
-    // ---------- Getters / setters de configuration ----------
+    // ---------- Getters / setters ----------
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -91,13 +117,21 @@ public class Arena {
         this.snapshot = new RegionSnapshot(resetRegion);
     }
 
-    /** Supprime la zone de jeu (reset region) sans supprimer l'arène. */
     public void clearResetRegion() {
         this.resetRegion = null;
         this.snapshot = null;
     }
 
-    public List<Location> getChestLocations() { return chestLocations; }
+    /** @deprecated Utiliser {@link #getTeamChests()} */
+    public List<Location> getChestLocations() {
+        List<Location> locs = new ArrayList<>();
+        for (ChestEntry e : teamChests) locs.add(e.location);
+        return locs;
+    }
+
+    public List<ChestEntry> getTeamChests() { return teamChests; }
+
+    public List<IronSpawner> getIronSpawners() { return ironSpawners; }
 
     public int getMaxPerTeam() { return maxPerTeam; }
     public void setMaxPerTeam(int maxPerTeam) { this.maxPerTeam = maxPerTeam; }
@@ -143,10 +177,6 @@ public class Arena {
         return state == ArenaState.WAITING || state == ArenaState.STARTING;
     }
 
-    /**
-     * Fait rejoindre un joueur au lobby d'attente de cette arène.
-     * Sa position actuelle est sauvegardée pour le retour lors du /blitz leave.
-     */
     public Team addPlayer(Player player) {
         if (!canJoin() || !isReady()) return null;
         if (getTeamCount(Team.RED) >= maxPerTeam && getTeamCount(Team.BLUE) >= maxPerTeam) return null;
@@ -158,11 +188,8 @@ public class Arena {
             team = Team.BLUE;
         }
         players.put(player.getUniqueId(), team);
-
-        // Sauvegarder la position avant téléportation
         preLobbyLocations.put(player.getUniqueId(), player.getLocation().clone());
 
-        // Téléporter au lobby d'arène ou au spawn d'équipe
         Location dest = arenaLobbySpawn != null ? arenaLobbySpawn
                 : (team == Team.RED ? redSpawn : blueSpawn);
         player.teleport(dest);
@@ -176,16 +203,12 @@ public class Arena {
         return team;
     }
 
-    /**
-     * Retire un joueur de l'arène et le renvoie à sa position d'avant le join (ou au lobby global).
-     */
     public void removePlayer(Player player) {
         Team team = players.remove(player.getUniqueId());
         if (team == null) return;
 
         plugin.getSidebarManager().clear(player);
 
-        // Restaurer inventaire et position
         player.getInventory().clear();
         player.getInventory().setArmorContents(null);
         player.setGameMode(GameMode.ADVENTURE);
@@ -211,9 +234,6 @@ public class Arena {
 
     public Team getTeam(Player player) { return players.get(player.getUniqueId()); }
 
-    /**
-     * Permet à un joueur en lobby de changer d'équipe (avant le début de partie).
-     */
     public boolean changeTeam(Player player, Team newTeam) {
         if (state == ArenaState.PLAYING) return false;
         Team old = players.get(player.getUniqueId());
@@ -223,7 +243,6 @@ public class Arena {
             return false;
         }
         players.put(player.getUniqueId(), newTeam);
-        // Mettre à jour l'item de sélection d'équipe
         player.getInventory().setItem(4, buildTeamSelectorItem(newTeam));
         plugin.getSidebarManager().update(this);
         return true;
@@ -237,15 +256,12 @@ public class Arena {
         player.setFoodLevel(20);
         player.setFireTicks(0);
 
-        // Item de sélection d'équipe (slot 2)
         player.getInventory().setItem(2, buildTeamSelectorItem(team));
 
-        // Item force-start pour admins (slot 0)
         if (player.hasPermission("blitz.admin")) {
             player.getInventory().setItem(0, buildForceStartItem());
         }
 
-        // Item quitter en slot 8
         player.getInventory().setItem(8, buildLeaveItem());
     }
 
@@ -361,11 +377,13 @@ public class Arena {
             }
         }
 
-        fillAllChests();
+        restoreAllChests();
         chestRefillTask = Bukkit.getScheduler().runTaskTimer(plugin,
-                this::fillAllChests,
+                this::restoreAllChests,
                 20L * plugin.getConfig().getInt("chest-refill-seconds", 600),
                 20L * plugin.getConfig().getInt("chest-refill-seconds", 600));
+
+        startIronSpawners();
 
         broadcast(ChatColor.GREEN + "" + ChatColor.BOLD + "La partie commence ! Premier à " + scoreLimit + " points !");
         plugin.getSidebarManager().update(this);
@@ -383,27 +401,75 @@ public class Arena {
         player.setFoodLevel(20);
     }
 
+    /**
+     * Donne le kit de base. Appelé uniquement à la mort (respawn)
+     * et au début de partie. Pas appelé lors d'un but.
+     */
     public void giveKit(Player player, Team team) {
         PlayerInventory inv = player.getInventory();
         NamespacedKey key = plugin.getKitKey();
 
         ItemStack helmet = new ItemBuilder(Material.LEATHER_HELMET).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
-        ItemStack chest = new ItemBuilder(Material.LEATHER_CHESTPLATE).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
-        ItemStack legs = new ItemBuilder(Material.LEATHER_LEGGINGS).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
-        ItemStack boots = new ItemBuilder(Material.LEATHER_BOOTS).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
-        ItemStack sword = new ItemBuilder(Material.WOODEN_SWORD).unbreakable(true).tag(key, "kit").build();
+        ItemStack chest  = new ItemBuilder(Material.LEATHER_CHESTPLATE).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
+        ItemStack legs   = new ItemBuilder(Material.LEATHER_LEGGINGS).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
+        ItemStack boots  = new ItemBuilder(Material.LEATHER_BOOTS).unbreakable(true).leatherColor(team.getArmorColor()).tag(key, "kit").build();
+        // Épée en bois de base
+        ItemStack sword  = new ItemBuilder(Material.WOODEN_SWORD).unbreakable(true).tag(key, "kit").build();
 
         inv.setHelmet(helmet);
         inv.setChestplate(chest);
         inv.setLeggings(legs);
         inv.setBoots(boots);
-        inv.addItem(sword);
+        // Ajouter l'épée seulement si pas déjà une épée en pierre dans l'inventaire
+        if (!hasStoneOrBetterSword(inv)) {
+            inv.addItem(sword);
+        }
+    }
+
+    /** Vérifie si le joueur possède déjà une épée en pierre (ou mieux) dans l'inventaire. */
+    public static boolean hasStoneOrBetterSword(PlayerInventory inv) {
+        for (ItemStack item : inv.getContents()) {
+            if (item == null) continue;
+            Material m = item.getType();
+            if (m == Material.STONE_SWORD || m == Material.IRON_SWORD
+                    || m == Material.GOLDEN_SWORD || m == Material.DIAMOND_SWORD
+                    || m == Material.NETHERITE_SWORD) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Appelé lors d'un but. L'inventaire du joueur n'est PAS réinitialisé,
+     * seule la téléportation et la vie/faim sont restaurées.
+     */
+    public void scorePoint(Team scoringTeam, Player scorer) {
+        scores.merge(scoringTeam, 1, Integer::sum);
+        broadcast(ChatColor.AQUA + "" + ChatColor.BOLD + "BUT ! " + ChatColor.RESET + scoringTeam.getChatColor()
+                + scorer.getName() + ChatColor.GRAY + " marque pour l'équipe " + scoringTeam.getChatColor()
+                + scoringTeam.getDisplayName() + ChatColor.GRAY + " (" + scores.get(scoringTeam) + "/" + scoreLimit + ")");
+
+        // Téléporter au spawn sans réinitialiser l'inventaire
+        Team team = getTeam(scorer);
+        if (team != null) {
+            scorer.teleport(team == Team.RED ? redSpawn : blueSpawn);
+            scorer.setHealth(20.0);
+            scorer.setFoodLevel(20);
+            scorer.setFireTicks(0);
+        }
+
+        plugin.getSidebarManager().update(this);
+        if (scores.get(scoringTeam) >= scoreLimit) {
+            endGame(scoringTeam);
+        }
     }
 
     public void endGame(Team winner) {
         if (state != ArenaState.PLAYING) return;
         state = ArenaState.RESTARTING;
         if (chestRefillTask != null) { chestRefillTask.cancel(); chestRefillTask = null; }
+        stopIronSpawners();
         cancelCountdown();
 
         broadcast(ChatColor.GOLD + "" + ChatColor.BOLD + "L'équipe " + winner.getChatColor() + winner.getDisplayName()
@@ -411,8 +477,8 @@ public class Arena {
 
         for (Map.Entry<UUID, Team> entry : players.entrySet()) {
             Player p = Bukkit.getPlayer(entry.getKey());
-            String name = p != null ? p.getName() : null;
-            PlayerStats stats = plugin.getStatsManager().get(entry.getKey(), name == null ? entry.getKey().toString() : name);
+            String name2 = p != null ? p.getName() : null;
+            PlayerStats stats = plugin.getStatsManager().get(entry.getKey(), name2 == null ? entry.getKey().toString() : name2);
             stats.addPlayed();
             if (entry.getValue() == winner) stats.addWin();
         }
@@ -420,7 +486,6 @@ public class Arena {
 
         int restartSeconds = plugin.getConfig().getInt("restart-seconds", 8);
         restartTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            // Renvoyer chaque joueur à sa position pré-lobby (ou lobby global)
             for (UUID uuid : new ArrayList<>(players.keySet())) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null) {
@@ -448,18 +513,6 @@ public class Arena {
         }, restartSeconds * 20L);
     }
 
-    public void scorePoint(Team scoringTeam, Player scorer) {
-        scores.merge(scoringTeam, 1, Integer::sum);
-        broadcast(ChatColor.AQUA + "" + ChatColor.BOLD + "BUT ! " + ChatColor.RESET + scoringTeam.getChatColor()
-                + scorer.getName() + ChatColor.GRAY + " marque pour l'équipe " + scoringTeam.getChatColor()
-                + scoringTeam.getDisplayName() + ChatColor.GRAY + " (" + scores.get(scoringTeam) + "/" + scoreLimit + ")");
-        respawnPlayer(scorer);
-        plugin.getSidebarManager().update(this);
-        if (scores.get(scoringTeam) >= scoreLimit) {
-            endGame(scoringTeam);
-        }
-    }
-
     // ---------- Blocs ----------
 
     public boolean isInResetRegion(Location loc) {
@@ -474,51 +527,109 @@ public class Arena {
         return block.getWorld().getName() + ";" + block.getX() + ";" + block.getY() + ";" + block.getZ();
     }
 
-    // ---------- Coffres ----------
+    // ---------- Coffres d'équipe ----------
 
-    public void fillAllChests() {
-        for (Location loc : chestLocations) fillChest(loc);
+    /**
+     * Ajoute un coffre enregistré avec son équipe et son numéro.
+     * Le contenu actuel du coffre est sauvegardé comme loot fixe.
+     */
+    public ChestEntry addTeamChest(Location loc, Team team) {
+        // Calculer le prochain index pour cette équipe
+        int nextIndex = 1;
+        for (ChestEntry e : teamChests) {
+            if (e.team == team && e.index >= nextIndex) nextIndex = e.index + 1;
+        }
+        // Lire le contenu actuel du coffre
+        ItemStack[] contents = readChestContents(loc);
+        ChestEntry entry = new ChestEntry(loc.clone(), team, nextIndex, contents);
+        teamChests.add(entry);
+        return entry;
     }
 
-    private void fillChest(Location loc) {
+    private ItemStack[] readChestContents(Location loc) {
+        if (loc.getWorld() == null) return new ItemStack[0];
+        Block block = loc.getBlock();
+        if (!(block.getState() instanceof Chest chestState)) return new ItemStack[0];
+        Inventory inv = chestState.getBlockInventory();
+        ItemStack[] contents = inv.getContents();
+        // Copier pour éviter les références
+        ItemStack[] copy = new ItemStack[contents.length];
+        for (int i = 0; i < contents.length; i++) {
+            copy[i] = (contents[i] != null) ? contents[i].clone() : null;
+        }
+        return copy;
+    }
+
+    /** Restaure tous les coffres avec leur contenu sauvegardé. */
+    public void restoreAllChests() {
+        for (ChestEntry entry : teamChests) {
+            restoreChest(entry);
+        }
+    }
+
+    private void restoreChest(ChestEntry entry) {
+        Location loc = entry.location;
         if (loc.getWorld() == null) return;
         Block block = loc.getBlock();
         if (!(block.getState() instanceof Chest chestState)) return;
         Inventory inv = chestState.getBlockInventory();
         inv.clear();
-        List<Integer> slots = new ArrayList<>();
-        for (int i = 0; i < inv.getSize(); i++) slots.add(i);
-        Collections.shuffle(slots);
-        List<ItemStack> loot = generateLoot();
-        for (int i = 0; i < loot.size() && i < slots.size(); i++) {
-            inv.setItem(slots.get(i), loot.get(i));
+        if (entry.savedContents != null) {
+            for (int i = 0; i < entry.savedContents.length && i < inv.getSize(); i++) {
+                if (entry.savedContents[i] != null) {
+                    inv.setItem(i, entry.savedContents[i].clone());
+                }
+            }
         }
     }
 
-    private List<ItemStack> generateLoot() {
-        ThreadLocalRandom rnd = ThreadLocalRandom.current();
-        List<ItemStack> loot = new ArrayList<>();
-        loot.add(new ItemStack(Material.STONE_SWORD));
-        loot.add(new ItemStack(Material.RED_WOOL, rnd.nextInt(2, 6)));
-        loot.add(new ItemStack(Material.BLUE_WOOL, rnd.nextInt(2, 6)));
-        loot.add(new ItemStack(Material.RED_TERRACOTTA, rnd.nextInt(4, 9)));
-        loot.add(new ItemStack(Material.BLUE_TERRACOTTA, rnd.nextInt(4, 9)));
-        loot.add(new ItemStack(Material.BOW));
-        loot.add(new ItemStack(Material.ARROW, rnd.nextInt(4, 12)));
-        loot.add(new ItemStack(Material.GOLDEN_APPLE, rnd.nextInt(1, 3)));
-        loot.add(new ItemStack(Material.COOKED_BEEF, rnd.nextInt(2, 6)));
-        if (rnd.nextBoolean()) loot.add(potion(PotionType.SWIFTNESS, false));
-        if (rnd.nextBoolean()) loot.add(potion(PotionType.STRENGTH, false));
-        if (rnd.nextInt(4) == 0) loot.add(potion(PotionType.HEALING, true));
-        Collections.shuffle(loot);
-        return loot;
+    /** Retourne l'équipe propriétaire d'un coffre à cette location (null si pas enregistré). */
+    public Team getChestTeam(Location loc) {
+        for (ChestEntry e : teamChests) {
+            if (isSameBlock(e.location, loc)) return e.team;
+        }
+        return null;
     }
 
-    private ItemStack potion(PotionType type, boolean splash) {
-        ItemStack item = new ItemStack(splash ? Material.SPLASH_POTION : Material.POTION);
-        PotionMeta meta = (PotionMeta) item.getItemMeta();
-        if (meta != null) { meta.setBasePotionType(type); item.setItemMeta(meta); }
-        return item;
+    /** Retourne le ChestEntry pour une location donnée. */
+    public ChestEntry getChestEntry(Location loc) {
+        for (ChestEntry e : teamChests) {
+            if (isSameBlock(e.location, loc)) return e;
+        }
+        return null;
+    }
+
+    private boolean isSameBlock(Location a, Location b) {
+        if (a == null || b == null) return false;
+        if (a.getWorld() == null || !a.getWorld().equals(b.getWorld())) return false;
+        return a.getBlockX() == b.getBlockX() && a.getBlockY() == b.getBlockY() && a.getBlockZ() == b.getBlockZ();
+    }
+
+    // ---------- Spawners de lingots ----------
+
+    public IronSpawner addIronSpawner(Location loc) {
+        IronSpawner spawner = new IronSpawner(loc.clone());
+        ironSpawners.add(spawner);
+        return spawner;
+    }
+
+    private void startIronSpawners() {
+        if (ironSpawners.isEmpty()) return;
+        // Spawner toutes les 60 secondes (1200 ticks)
+        ironSpawnerTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (IronSpawner spawner : ironSpawners) {
+                if (spawner.location.getWorld() != null) {
+                    spawner.location.getWorld().dropItemNaturally(spawner.location, new ItemStack(Material.IRON_INGOT));
+                }
+            }
+        }, 1200L, 1200L);
+    }
+
+    private void stopIronSpawners() {
+        if (ironSpawnerTask != null) {
+            ironSpawnerTask.cancel();
+            ironSpawnerTask = null;
+        }
     }
 
     // ---------- Divers ----------
@@ -532,7 +643,7 @@ public class Arena {
 
     /**
      * Démarre la partie immédiatement (admin).
-     * Retourne false si le minimum de joueurs n'est pas atteint (1 par équipe).
+     * Retourne {@code false} si le minimum de joueurs n'est pas atteint (1 par équipe).
      */
     public boolean forceStart() {
         if (getTeamCount(Team.RED) < 1 || getTeamCount(Team.BLUE) < 1) {
@@ -547,5 +658,6 @@ public class Arena {
         if (countdownTask != null) countdownTask.cancel();
         if (chestRefillTask != null) chestRefillTask.cancel();
         if (restartTask != null) restartTask.cancel();
+        stopIronSpawners();
     }
 }
